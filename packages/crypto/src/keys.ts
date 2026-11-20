@@ -1,3 +1,5 @@
+import { toArrayBuffer } from './buffer.js';
+
 /**
  * Convert a hex string to a Uint8Array.
  *
@@ -34,7 +36,7 @@ export const deriveKey = async (
   // Import raw key material as HKDF base key
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    rawKeyMaterial,
+    toArrayBuffer(rawKeyMaterial),
     'HKDF',
     false,
     ['deriveKey'],
@@ -45,8 +47,8 @@ export const deriveKey = async (
     {
       name: 'HKDF',
       hash: 'SHA-256',
-      salt,
-      info: new TextEncoder().encode(info),
+      salt: toArrayBuffer(salt),
+      info: toArrayBuffer(new TextEncoder().encode(info)),
     },
     baseKey,
     {

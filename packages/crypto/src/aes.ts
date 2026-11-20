@@ -1,3 +1,5 @@
+import { toArrayBuffer } from './buffer.js';
+
 /** Length of the AES-GCM initialization vector in bytes. */
 const IV_LENGTH = 12;
 
@@ -70,10 +72,10 @@ export const aesEncrypt = async (
   const ciphertext = await crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
-      iv,
+      iv: toArrayBuffer(iv),
     },
     key,
-    data,
+    toArrayBuffer(data),
   );
 
   return {

@@ -2,7 +2,7 @@
   "name": "chatterroom",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"pnpm --filter client dev\" \"pnpm --filter server dev\"",
+    "dev": "pnpm --filter @chatterroom/crypto build && concurrently \"pnpm --filter client dev\" \"pnpm --filter server dev\"",
     "build": "pnpm --filter @chatterroom/crypto build && pnpm --filter client build && pnpm --filter server build",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
