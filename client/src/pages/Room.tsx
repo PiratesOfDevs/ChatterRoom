@@ -97,17 +97,17 @@ export const Room: React.FC = () => {
       </div>
     );
   }
+  
 
   return (
-    <div className="chat-room flex flex-col bg-gray-900 text-white">
-      <RoomHeader
-        roomId={roomId}
-        userCount={userCount}
-        isEncrypted={cryptoReady}
-        onLeave={handleLeave}
-      />
-      <ChatWindow messages={messages} />
-      <MessageInput onSend={handleSend} disabled={connectionStatus !== 'connected'} />
-    </div>
-  );
+    <div className="chat-room flex min-h-screen flex-col bg-slate-100 text-slate-900 transition-colors duration-300 dark:bg-[#0B111A] dark:text-slate-100">
+        <RoomHeader
+          roomId={roomId}
+          userCount={userCount}
+          isEncrypted={cryptoReady}
+          onLeave={handleLeave}
+        />
+        <ChatWindow messages={messages} />
+        <MessageInput onSend={handleSend} disabled={connectionStatus !== 'connected'} />
+    </div>  );
 };
