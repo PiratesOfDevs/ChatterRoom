@@ -19,9 +19,14 @@ export interface ChatWindowProps {
  */
 export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
   return (
-    <div className="chat-message-feed min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-xl bg-slate-50/70 p-3 text-slate-900 transition-colors duration-300 dark:bg-[#0B111A] dark:text-slate-100 sm:p-4">
+   <div
+      role="log"
+      aria-live="polite"
+      aria-label="Chat messages"
+      className="chat-message-feed min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-xl bg-slate-50/70 p-3 text-slate-900 transition-colors duration-300 dark:bg-[#0B111A] dark:text-slate-100 sm:p-4"
+      >
       {messages.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center py-10 text-center">
+        <div className="flex h-full flex-col items-center justify-center px-4 py-10 text-center">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -36,8 +41,11 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
             <line x1="12" y1="22" x2="12" y2="8" />
             <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
           </svg>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            No messages yet. Weigh anchor and start the conversation!
+          <p className="text-base font-medium text-slate-800 dark:text-slate-200">
+            No messages yet.
+          </p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Weigh anchor and send a message to start chatting!            No messages yet. Weigh anchor and start the conversation!
           </p>
         </div>
       ) : (
