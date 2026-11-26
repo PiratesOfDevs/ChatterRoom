@@ -42,3 +42,6 @@ __snapshots__/
 # Sensitive roster data
 roster.csv
 scripts/roster.csv
+
+# Load-test output (scripts/load-test.mjs)
+bench-results/
