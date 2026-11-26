@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { ChatWindow } from '../components/ChatWindow';
 import { MessageInput } from '../components/MessageInput';
@@ -33,6 +33,22 @@ export const Room: React.FC = () => {
   const { keys, encrypt, decrypt, isReady: cryptoReady } = useCrypto(encryptionKey);
   const { sendMessage, connectionStatus, lastMessage } = useWebSocket(roomId ?? '');
   const { messages, userCount, addMessage, setUserCount, clearMessages } = useRoom();
+  const settledUserCountRef = useRef<number | null>(null);
+  const systemNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    settledUserCountRef.current = null;
+    if (systemNoticeTimerRef.current) {
+      clearTimeout(systemNoticeTimerRef.current);
+      systemNoticeTimerRef.current = null;
+    }
+    return () => {
+      if (systemNoticeTimerRef.current) {
+        clearTimeout(systemNoticeTimerRef.current);
+        systemNoticeTimerRef.current = null;
+      }
+    };
+  }, [roomId]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -45,6 +61,32 @@ export const Room: React.FC = () => {
           const count = (parsed.data as { userCount?: unknown }).userCount;
           if (typeof count === 'number') {
             setUserCount(count);
+
+            if (settledUserCountRef.current === null) {
+              settledUserCountRef.current = count;
+              return;
+            }
+
+            if (systemNoticeTimerRef.current) {
+              clearTimeout(systemNoticeTimerRef.current);
+            }
+
+            // Debounce join/leave notices to ignore rapid StrictMode / reconnect churn
+            systemNoticeTimerRef.current = setTimeout(() => {
+              const settled = settledUserCountRef.current;
+              if (settled !== null && count !== settled) {
+                addMessage({
+                  id: crypto.randomUUID(),
+                  sender: 'System',
+                  content: count > settled ? 'A user joined the room' : 'A user left the room',
+                  timestamp: Date.now(),
+                  isMine: false,
+                  type: 'system',
+                });
+                settledUserCountRef.current = count;
+              }
+              systemNoticeTimerRef.current = null;
+            }, 300);
           }
           return;
         }
