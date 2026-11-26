@@ -146,6 +146,60 @@ describe('Fastify Server (#36)', () => {
     recipient.close();
   });
 
+  it('relays stringified encrypted payloads unchanged, as the React client sends them (#15)', async () => {
+    app = await buildServer();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const wsBase = address.replace('http://', 'ws://');
+
+    const sender = new WebSocket(`${wsBase}/ws/room-string-payload`);
+    const recipient = new WebSocket(`${wsBase}/ws/room-string-payload`);
+    await Promise.all([
+      new Promise<void>((resolve) => sender.once('open', () => resolve())),
+      new Promise<void>((resolve) => recipient.once('open', () => resolve())),
+    ]);
+
+    const received = new Promise<string>((resolve) => {
+      recipient.on('message', (data) => {
+        const parsed = JSON.parse(data.toString()) as { type: string };
+        if (parsed.type === 'chat') resolve(data.toString());
+      });
+    });
+
+    const encrypted = JSON.stringify({ ciphertext: 'YWJj', iv: 'aXY=' });
+    sender.send(JSON.stringify({ type: 'chat', data: encrypted }));
+
+    expect(JSON.parse(await received)).toEqual({ type: 'chat', data: encrypted });
+
+    sender.close();
+    recipient.close();
+  });
+
+  it('returns a structured error frame for invalid payloads and keeps the connection open (#15)', async () => {
+    app = await buildServer();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const wsBase = address.replace('http://', 'ws://');
+
+    const socket = new WebSocket(`${wsBase}/ws/room-invalid-payload`);
+    await new Promise<void>((resolve) => socket.once('open', () => resolve()));
+
+    const errorFrame = new Promise<unknown>((resolve) => {
+      socket.on('message', (data) => {
+        const parsed = JSON.parse(data.toString()) as { type: string };
+        if (parsed.type === 'error') resolve(parsed);
+      });
+    });
+
+    socket.send(JSON.stringify({ type: 'chat', data: 'not-an-encrypted-payload' }));
+
+    expect(await errorFrame).toEqual({
+      type: 'error',
+      code: 'INVALID_SHAPE',
+      data: 'Invalid message format',
+    });
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    socket.close();
+  });
+
   it('rejects malformed JSON and JSON without a type field', async () => {
     app = await buildServer();
     const address = await app.listen({ port: 0, host: '127.0.0.1' });
@@ -181,26 +235,5 @@ describe('Fastify Server (#36)', () => {
 
     expect(closeCode).toBe(4000);
   });
-
-    it('returns an error frame for invalid payloads and keeps the connection open ', async () => {
-    app = await buildServer();
-    const address = await app.listen({ port: 0, host: '127.0.0.1' });
-    const wsBase = address.replace('http://', 'ws://');
-
-    const ws = new WebSocket(`${wsBase}/ws/room-validate`);
-    await new Promise<void>((resolve) => ws.once('open', () => resolve()));
-
-    const errorFrame = new Promise<{ type: string; code: string }>((resolve) => {
-      ws.on('message', (data) => {
-        const parsed = JSON.parse(data.toString()) as { type: string; code: string };
-        if (parsed.type === 'error') resolve(parsed);
-      });
-    });
-
-    ws.send(JSON.stringify({ type: 'chat', data: 'not-an-object' }));
-
-    expect(await errorFrame).toEqual({ type: 'error', code: 'INVALID_SHAPE' });
-    expect(ws.readyState).toBe(WebSocket.OPEN);
-    ws.close();
-  });
+    
 });
