@@ -89,7 +89,10 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
 export const onMessage = (roomId: string, sender: WebSocket, message: IncomingMessage): void => {
   switch (message.type) {
     case 'join':
-      roomManager.joinRoom(roomId, sender);
+      if (!roomManager.isClientInRoom(roomId, sender)) {
+        roomManager.joinRoom(roomId, sender);
+        leftSockets.delete(sender);
+      }
       roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
     case 'message':
@@ -98,9 +101,11 @@ export const onMessage = (roomId: string, sender: WebSocket, message: IncomingMe
       roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
     case 'leave':
-      leftSockets.add(sender);
-      roomManager.leaveRoom(roomId, sender);
-      roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      if (!leftSockets.has(sender)) {
+        leftSockets.add(sender);
+        roomManager.leaveRoom(roomId, sender);
+        roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      }
       break;
     case 'chat':
       // Backward-compatible alias for the original chat message protocol.

@@ -90,11 +90,22 @@ describe('Fastify Server (#36)', () => {
 
     const sender = new WebSocket(`${wsBase}/ws/protocol-room`);
     const recipient = new WebSocket(`${wsBase}/ws/protocol-room`);
+    let roomInfoCount = 0;
+    const firstRoomInfo = new Promise<void>((resolve) => {
+      recipient.on('message', (data) => {
+        const parsed = JSON.parse(data.toString()) as { type: string };
+        if (parsed.type === 'room_info') {
+          roomInfoCount += 1;
+          resolve();
+        }
+      });
+    });
 
     await Promise.all([
       new Promise<void>((resolve) => sender.once('open', () => resolve())),
       new Promise<void>((resolve) => recipient.once('open', () => resolve())),
     ]);
+    await firstRoomInfo;
 
     const receiveType = (socket: WebSocket, type: string): Promise<string> =>
       new Promise((resolve) => {
@@ -104,12 +115,14 @@ describe('Fastify Server (#36)', () => {
         });
       });
 
+    const roomInfoCountBeforeJoin = roomInfoCount;
     const joinReceived = receiveType(recipient, 'join');
     sender.send(JSON.stringify({ type: 'join', data: { clientId: 'sender' } }));
     expect(JSON.parse(await joinReceived)).toEqual({
       type: 'join',
       data: { clientId: 'sender' },
     });
+    expect(roomInfoCount).toBe(roomInfoCountBeforeJoin);
 
     const messageReceived = receiveType(recipient, 'message');
     sender.send(JSON.stringify({ type: 'message', data: { ciphertext: 'secret', iv: 'iv' } }));

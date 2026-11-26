@@ -19,6 +19,16 @@ describe('RoomManager', () => {
     expect(manager.getRoomSize('room-a')).toBe(1);
   });
 
+  it('checks whether a client is already in a room', () => {
+    const manager = new RoomManager();
+    const client = createSocket();
+
+    expect(manager.isClientInRoom('room-a', client)).toBe(false);
+    manager.createOrJoin('room-a', client);
+    expect(manager.isClientInRoom('room-a', client)).toBe(true);
+    expect(manager.isClientInRoom('room-b', client)).toBe(false);
+  });
+
   it('removes clients and destroys the room when the last client leaves', () => {
     const manager = new RoomManager();
     const first = createSocket();
