@@ -73,6 +73,13 @@ export class RoomManager {
   }
 
   /**
+   * Check whether a client is already in a room.
+   */
+  isClientInRoom(roomId: string, client: WebSocket): boolean {
+    return this.rooms.get(roomId)?.has(client) ?? false;
+  }
+
+  /**
    * Add a client to a room and notify existing room members of the new count.
    */
   joinRoom(roomId: string, client: WebSocket): void {

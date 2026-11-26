@@ -83,6 +83,92 @@ describe('Fastify Server (#36)', () => {
     ws2.close();
   });
 
+  it('routes join, message, key-exchange, and leave protocol types', async () => {
+    app = await buildServer();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const wsBase = address.replace('http://', 'ws://');
+
+    const sender = new WebSocket(`${wsBase}/ws/protocol-room`);
+    const recipient = new WebSocket(`${wsBase}/ws/protocol-room`);
+    let roomInfoCount = 0;
+    const firstRoomInfo = new Promise<void>((resolve) => {
+      recipient.on('message', (data) => {
+        const parsed = JSON.parse(data.toString()) as { type: string };
+        if (parsed.type === 'room_info') {
+          roomInfoCount += 1;
+          resolve();
+        }
+      });
+    });
+
+    await Promise.all([
+      new Promise<void>((resolve) => sender.once('open', () => resolve())),
+      new Promise<void>((resolve) => recipient.once('open', () => resolve())),
+    ]);
+    await firstRoomInfo;
+
+    const receiveType = (socket: WebSocket, type: string): Promise<string> =>
+      new Promise((resolve) => {
+        socket.on('message', (data) => {
+          const parsed = JSON.parse(data.toString()) as { type: string };
+          if (parsed.type === type) resolve(data.toString());
+        });
+      });
+
+    const roomInfoCountBeforeJoin = roomInfoCount;
+    const joinReceived = receiveType(recipient, 'join');
+    sender.send(JSON.stringify({ type: 'join', data: { clientId: 'sender' } }));
+    expect(JSON.parse(await joinReceived)).toEqual({
+      type: 'join',
+      data: { clientId: 'sender' },
+    });
+    expect(roomInfoCount).toBe(roomInfoCountBeforeJoin);
+
+    const messageReceived = receiveType(recipient, 'message');
+    sender.send(JSON.stringify({ type: 'message', data: { ciphertext: 'secret', iv: 'iv' } }));
+    expect(JSON.parse(await messageReceived)).toEqual({
+      type: 'message',
+      data: { ciphertext: 'secret', iv: 'iv' },
+    });
+
+    const keyReceived = receiveType(recipient, 'key-exchange');
+    sender.send(JSON.stringify({ type: 'key-exchange', data: { publicKey: 'key' } }));
+    expect(JSON.parse(await keyReceived)).toEqual({
+      type: 'key-exchange',
+      data: { publicKey: 'key' },
+    });
+
+    const leaveReceived = receiveType(recipient, 'leave');
+    sender.send(JSON.stringify({ type: 'leave' }));
+    expect(JSON.parse(await leaveReceived)).toEqual({ type: 'leave' });
+
+    sender.close();
+    recipient.close();
+  });
+
+  it('rejects malformed JSON and JSON without a type field', async () => {
+    app = await buildServer();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const wsBase = address.replace('http://', 'ws://');
+    const socket = new WebSocket(`${wsBase}/ws/validation-room`);
+
+    await new Promise<void>((resolve) => socket.once('open', () => resolve()));
+
+    const firstError = new Promise<string>((resolve) => {
+      socket.once('message', (data) => resolve(JSON.parse(data.toString()).data));
+    });
+    socket.send('{not-json');
+    expect(await firstError).toBe('Malformed JSON');
+
+    const secondError = new Promise<string>((resolve) => {
+      socket.once('message', (data) => resolve(JSON.parse(data.toString()).data));
+    });
+    socket.send(JSON.stringify({ data: 'missing type' }));
+    expect(await secondError).toBe('Invalid message format');
+
+    socket.close();
+  });
+
   it('closes WebSocket connections to /ws without a room ID using code 4000', async () => {
     app = await buildServer();
     const address = await app.listen({ port: 0, host: '127.0.0.1' });

@@ -7,6 +7,24 @@ import { startHeartbeat } from './heartbeat.js';
 import { validateIncoming, type ClientMessage, type ValidationErrorCode } from './validator.js';
 
 const roomManager = new RoomManager();
+const leftSockets = new WeakSet<WebSocket>();
+
+/** Human-readable text for each validation error. Never includes client input. */
+const ERROR_MESSAGES: Record<ValidationErrorCode, string> = {
+  INVALID_JSON: 'Malformed JSON',
+  INVALID_SHAPE: 'Invalid message format',
+  PAYLOAD_TOO_LARGE: 'Payload too large',
+};
+
+const sendError = (socket: WebSocket, message: string, code?: ValidationErrorCode): void => {
+  if (socket.readyState === socket.OPEN) {
+    const frame =
+      code === undefined
+        ? { type: 'error', data: message }
+        : { type: 'error', code, data: message };
+    socket.send(JSON.stringify(frame));
+  }
+};
 
 /**
  * Handle a new WebSocket connection.
@@ -32,14 +50,14 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
   socket.on('message', (raw: Buffer, isBinary: boolean) => {
     // Rate limiting
     if (!checkRateLimit(clientIp)) {
-      socket.send(JSON.stringify({ type: 'error', data: 'Rate limit exceeded' }));
+      sendError(socket, 'Rate limit exceeded');
       return;
     }
 
-    // Validate shape and size before anything is relayed
+    // Validate size, JSON and exact shape before anything is relayed
     const result = validateIncoming(raw, isBinary);
     if (!result.ok) {
-      sendError(socket, result.code);
+      sendError(socket, ERROR_MESSAGES[result.code], result.code);
       return;
     }
 
@@ -56,34 +74,36 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
 };
 
 /**
- * Send a structured error frame to a client.
- * Carries only an error code, never the offending payload.
- *
- * @param socket - The client to notify
- * @param code - The validation error code
- */
-const sendError = (socket: WebSocket, code: ValidationErrorCode): void => {
-  if (socket.readyState === socket.OPEN) {
-    socket.send(JSON.stringify({ type: 'error', code }));
-  }
-};
-
-/**
  * Handle a validated message from a client.
  *
  * @param roomId - The room the message was sent in
  * @param sender - The sending WebSocket
  * @param message - The validated message
  */
-const onMessage = (roomId: string, sender: WebSocket, message: ClientMessage): void => {
+export const onMessage = (roomId: string, sender: WebSocket, message: ClientMessage): void => {
   switch (message.type) {
-    case 'chat':
-    case 'key-exchange':
-      // Relay the validated frame (re-serialised, so nothing unvalidated rides along)
+    case 'join':
+      if (!roomManager.isClientInRoom(roomId, sender)) {
+        roomManager.joinRoom(roomId, sender);
+        leftSockets.delete(sender);
+      }
       roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
-    case 'join':
-      // The room is joined at connect time from the URL; nothing to do yet.
+    case 'message':
+    case 'key-exchange':
+      // Relay encrypted payloads and key material without inspecting or storing them.
+      roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      break;
+    case 'leave':
+      if (!leftSockets.has(sender)) {
+        leftSockets.add(sender);
+        roomManager.leaveRoom(roomId, sender);
+        roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      }
+      break;
+    case 'chat':
+      // Backward-compatible alias for the original chat message protocol.
+      roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
     default: {
       const unreachable: never = message;
@@ -98,7 +118,10 @@ const onMessage = (roomId: string, sender: WebSocket, message: ClientMessage): v
  * @param roomId - The room the client was in
  * @param socket - The disconnecting WebSocket
  */
-const onClose = (roomId: string, socket: WebSocket): void => {
+export const onClose = (roomId: string, socket: WebSocket): void => {
   logger.info(`Client disconnected from room ${roomId}`);
-  roomManager.leaveRoom(roomId, socket);
+  if (!leftSockets.has(socket)) {
+    roomManager.leaveRoom(roomId, socket);
+  }
+  leftSockets.delete(socket);
 };
