@@ -4,14 +4,9 @@ import { RoomManager } from './room-manager.js';
 import { checkRateLimit } from '../middleware/rate-limiter.js';
 import { logger } from '../utils/logger.js';
 import { startHeartbeat } from './heartbeat.js';
+import { validateIncoming, type ClientMessage, type ValidationErrorCode } from './validator.js';
 
 const roomManager = new RoomManager();
-
-interface IncomingMessage {
-  type: string;
-  roomId?: string;
-  data?: unknown;
-}
 
 /**
  * Handle a new WebSocket connection.
@@ -34,19 +29,21 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
   roomManager.joinRoom(roomId, socket);
   startHeartbeat(socket);
 
-  socket.on('message', (raw: Buffer) => {
+  socket.on('message', (raw: Buffer, isBinary: boolean) => {
     // Rate limiting
     if (!checkRateLimit(clientIp)) {
       socket.send(JSON.stringify({ type: 'error', data: 'Rate limit exceeded' }));
       return;
     }
 
-    try {
-      const message = JSON.parse(raw.toString()) as IncomingMessage;
-      onMessage(roomId, socket, message);
-    } catch {
-      logger.warn(`Malformed message from ${clientIp}`);
+    // Validate shape and size before anything is relayed
+    const result = validateIncoming(raw, isBinary);
+    if (!result.ok) {
+      sendError(socket, result.code);
+      return;
     }
+
+    onMessage(roomId, socket, result.message);
   });
 
   socket.on('close', () => {
@@ -59,20 +56,39 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
 };
 
 /**
- * Handle an incoming message from a client.
+ * Send a structured error frame to a client.
+ * Carries only an error code, never the offending payload.
+ *
+ * @param socket - The client to notify
+ * @param code - The validation error code
+ */
+const sendError = (socket: WebSocket, code: ValidationErrorCode): void => {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify({ type: 'error', code }));
+  }
+};
+
+/**
+ * Handle a validated message from a client.
  *
  * @param roomId - The room the message was sent in
  * @param sender - The sending WebSocket
- * @param message - The parsed message payload
+ * @param message - The validated message
  */
-const onMessage = (roomId: string, sender: WebSocket, message: IncomingMessage): void => {
+const onMessage = (roomId: string, sender: WebSocket, message: ClientMessage): void => {
   switch (message.type) {
     case 'chat':
-      // Broadcast encrypted message to all other participants
+    case 'key-exchange':
+      // Relay the validated frame (re-serialised, so nothing unvalidated rides along)
       roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
-    default:
-      logger.warn(`Unknown message type: ${message.type}`);
+    case 'join':
+      // The room is joined at connect time from the URL; nothing to do yet.
+      break;
+    default: {
+      const unreachable: never = message;
+      void unreachable;
+    }
   }
 };
 

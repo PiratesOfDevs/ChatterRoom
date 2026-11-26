@@ -95,4 +95,26 @@ describe('Fastify Server (#36)', () => {
 
     expect(closeCode).toBe(4000);
   });
+
+    it('returns an error frame for invalid payloads and keeps the connection open ', async () => {
+    app = await buildServer();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const wsBase = address.replace('http://', 'ws://');
+
+    const ws = new WebSocket(`${wsBase}/ws/room-validate`);
+    await new Promise<void>((resolve) => ws.once('open', () => resolve()));
+
+    const errorFrame = new Promise<{ type: string; code: string }>((resolve) => {
+      ws.on('message', (data) => {
+        const parsed = JSON.parse(data.toString()) as { type: string; code: string };
+        if (parsed.type === 'error') resolve(parsed);
+      });
+    });
+
+    ws.send(JSON.stringify({ type: 'chat', data: 'not-an-object' }));
+
+    expect(await errorFrame).toEqual({ type: 'error', code: 'INVALID_SHAPE' });
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    ws.close();
+  });
 });
