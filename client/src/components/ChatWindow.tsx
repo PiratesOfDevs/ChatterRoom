@@ -88,7 +88,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
           </p>
        </div>
       ) : (
-        <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        <div className="flex w-full flex-col gap-2 ">
           {messages.map((msg) =>
             msg.type === 'system' ? (
               <div key={msg.id} className="my-2 flex justify-center">

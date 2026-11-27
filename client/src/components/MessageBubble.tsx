@@ -21,24 +21,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
     ? 'text-[#0B111A]/80 font-medium'
     : 'text-slate-600 dark:text-slate-300';
 
-  return (
-    <div className={`flex ${alignment} transition-all duration-200`}>
-      <div
-        className={`max-w-[80%] px-4 py-2 transition-colors duration-200 sm:max-w-md ${bubbleStyles}`}
+return (
+  <div className={`flex w-full ${alignment} transition-all duration-200`}>
+    <div
+      className={`w-fit max-w-[80%] shrink-0 px-4 py-2 transition-colors duration-200 sm:max-w-md ${bubbleStyles}`}
+    >
+      <p className={`mb-1 text-xs font-semibold ${senderStyles}`}>
+        {message.sender}
+      </p>
+      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+        {message.content}
+      </p>
+      <time
+        dateTime={new Date(message.timestamp).toISOString()}
+        className={`mt-1 block text-right text-xs ${timeStyles}`}
       >
-          <p className={`mb-1 text-xs font-semibold ${senderStyles}`}>
-            {message.sender}
-          </p>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-            {message.content}
-          </p>
-          <time
-            dateTime={new Date(message.timestamp).toISOString()}
-            className={`mt-1 block text-right text-xs ${timeStyles}`}
-          >
-            {formatMessageTime(message.timestamp)}
-          </time>
-        </div>
-      </div>
-  );
-};
+        {formatMessageTime(message.timestamp)}
+      </time>
+    </div>
+  </div>
+);};
