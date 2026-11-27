@@ -37,12 +37,13 @@ describe('ChatWindow', () => {
     const html = renderToStaticMarkup(React.createElement(ChatWindow, { messages }));
 
     expect(html).toContain('justify-end');
-    expect(html).toContain('bg-emerald-600');
+    expect(html).toContain('bg-amber-500');
     expect(html).toContain('You');
     expect(html).toContain('Ahoy there!');
 
     expect(html).toContain('justify-start');
-    expect(html).toContain('bg-slate-800');
+    expect(html).toContain('bg-white');
+    expect(html).toContain('dark:bg-[#131C2B]');
     expect(html).toContain('Peer');
     expect(html).toContain('Ahoy back!');
 

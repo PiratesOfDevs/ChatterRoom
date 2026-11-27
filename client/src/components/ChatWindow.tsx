@@ -84,7 +84,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ messages }) => {
             No messages yet.
           </p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Weigh anchor and send a message to start chatting!
+            Send a message to start chatting!
           </p>
        </div>
       ) : (
