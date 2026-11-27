@@ -16,5 +16,6 @@ export const applySecurity = (app: FastifyInstance): void => {
       'Content-Security-Policy',
       "default-src 'self'; connect-src 'self' ws: wss:;",
     );
+    reply.removeHeader('X-Powered-By');
   });
 };
