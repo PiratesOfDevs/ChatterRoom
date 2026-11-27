@@ -32,9 +32,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
             {message.content}
           </p>
-          <p className={`mt-1 text-right text-xs ${timeStyles}`}>
-            {new Date(message.timestamp).toLocaleTimeString()}
-          </p>
+          <time
+            dateTime={new Date(message.timestamp).toISOString()}
+            className={`mt-1 block text-right text-xs ${timeStyles}`}
+          >
+            {formatMessageTime(message.timestamp)}
+          </time>
         </div>
       </div>
   );
