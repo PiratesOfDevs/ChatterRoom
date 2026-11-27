@@ -6,12 +6,19 @@ import { logger } from '../utils/logger.js';
 import { startHeartbeat } from './heartbeat.js';
 
 const roomManager = new RoomManager();
+const leftSockets = new WeakSet<WebSocket>();
 
 interface IncomingMessage {
   type: string;
   roomId?: string;
   data?: unknown;
 }
+
+const sendError = (socket: WebSocket, message: string): void => {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify({ type: 'error', data: message }));
+  }
+};
 
 /**
  * Handle a new WebSocket connection.
@@ -37,15 +44,29 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
   socket.on('message', (raw: Buffer) => {
     // Rate limiting
     if (!checkRateLimit(clientIp)) {
-      socket.send(JSON.stringify({ type: 'error', data: 'Rate limit exceeded' }));
+      sendError(socket, 'Rate limit exceeded');
       return;
     }
 
     try {
-      const message = JSON.parse(raw.toString()) as IncomingMessage;
+      const parsed: unknown = JSON.parse(raw.toString());
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        !('type' in parsed) ||
+        typeof parsed.type !== 'string' ||
+        parsed.type.trim().length === 0
+      ) {
+        logger.warn(`Invalid message format from ${clientIp}`);
+        sendError(socket, 'Invalid message format');
+        return;
+      }
+
+      const message = parsed as IncomingMessage;
       onMessage(roomId, socket, message);
     } catch {
       logger.warn(`Malformed message from ${clientIp}`);
+      sendError(socket, 'Malformed JSON');
     }
   });
 
@@ -65,14 +86,34 @@ export const handleWebSocketConnection = (socket: WebSocket, req: FastifyRequest
  * @param sender - The sending WebSocket
  * @param message - The parsed message payload
  */
-const onMessage = (roomId: string, sender: WebSocket, message: IncomingMessage): void => {
+export const onMessage = (roomId: string, sender: WebSocket, message: IncomingMessage): void => {
   switch (message.type) {
+    case 'join':
+      if (!roomManager.isClientInRoom(roomId, sender)) {
+        roomManager.joinRoom(roomId, sender);
+        leftSockets.delete(sender);
+      }
+      roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      break;
+    case 'message':
+    case 'key-exchange':
+      // Relay encrypted payloads and key material without inspecting or storing them.
+      roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      break;
+    case 'leave':
+      if (!leftSockets.has(sender)) {
+        leftSockets.add(sender);
+        roomManager.leaveRoom(roomId, sender);
+        roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
+      }
+      break;
     case 'chat':
-      // Broadcast encrypted message to all other participants
+      // Backward-compatible alias for the original chat message protocol.
       roomManager.broadcastToRoom(roomId, JSON.stringify(message), sender);
       break;
     default:
       logger.warn(`Unknown message type: ${message.type}`);
+      sendError(sender, `Unknown message type: ${message.type}`);
   }
 };
 
@@ -82,7 +123,10 @@ const onMessage = (roomId: string, sender: WebSocket, message: IncomingMessage):
  * @param roomId - The room the client was in
  * @param socket - The disconnecting WebSocket
  */
-const onClose = (roomId: string, socket: WebSocket): void => {
+export const onClose = (roomId: string, socket: WebSocket): void => {
   logger.info(`Client disconnected from room ${roomId}`);
-  roomManager.leaveRoom(roomId, socket);
+  if (!leftSockets.has(socket)) {
+    roomManager.leaveRoom(roomId, socket);
+  }
+  leftSockets.delete(socket);
 };

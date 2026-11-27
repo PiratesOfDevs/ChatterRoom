@@ -46,7 +46,7 @@ Guidelines:
 async function queryGemini(diff) {
   if (!GEMINI_API_KEY) return null;
 
-  const models = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
   for (const model of models) {
     try {
       console.log(`🤖 Attempting review with Google Gemini (${model})...`);
@@ -88,7 +88,7 @@ async function queryGroq(diff) {
         Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Review this Pull Request diff for ChatterRoom:\n\n\`\`\`diff\n${diff.slice(0, 15000)}\n\`\`\`` },
